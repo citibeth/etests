@@ -1,21 +1,23 @@
-set(SRCS hello_world.F90)
+set(SOURCES ${PFUNIT_INCLUDE_DIR}/driver.F90)
 
 
-
-# This step presumes "include $(PFUNIT)/include/base.mk" earlier in the makefile.
-tests.x: testSuites.inc myTests.pf
-         $(F90) -o $@ -I$(PFUNIT)/mod -I$(PFUNIT)/include \
-                $(PFUNIT)/include/driver.F90 \
-                ./*$(OBJ_EXT) $(LIBS) $(FFLAGS)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 
+#set(PF_SOURCES helloWorld.pf)
+file(GLOB PF_SOURCES "*.pf")
+foreach (src_pf ${PF_SOURCES})
+   get_filename_component (src_bare ${src_pf} NAME_WE)
 
+    add_custom_command (
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${src_bare}.F90
+        COMMAND ${PFUNIT_BIN_DIR}/pFUnitParser.py
+        ARGS ${src_pf} ${CMAKE_CURRENT_BINARY_DIR}/${src_bare}.F90
+        DEPENDS ${src_pf}
+    )
+    list(APPEND SOURCES ${CMAKE_CURRENT_BINARY_DIR}/${src_bare}.F90)
+endforeach()
 
-SOURCES = hello_world.F90
-
-
-# This step presumes "include $(PFUNIT)/include/base.mk" earlier in the makefile.
-tests.x: testSuites.inc myTests.pf
-         $(F90) -o $@ -I$(PFUNIT)/mod -I$(PFUNIT)/include \
-                $(PFUNIT)/include/driver.F90 \
-                ./*$(OBJ_EXT) $(LIBS) $(FFLAGS)
+add_executable(tests ${SOURCES})
+target_link_libraries(tests ${ALL_LIBS})
+add_test(AllTests tests)

@@ -17,13 +17,13 @@ if (NOT DEFINED MODELE_ROOT)
     set(MODELE_ROOT $ENV{ECTL_PKG})
 endif()
 
-find_package(ModelE REQUIRED)
-include_directories(${MODELE_INCLUDE_DIR})
-list(APPEND ALL_LIBS ${MODELE_LIBRARY})
-
 find_package(pFUnit REQUIRED)
 include_directories(${PFUNIT_INCLUDE_DIR} ${PFUNIT_MOD_DIR})
 list(APPEND ALL_LIBS ${PFUNIT_LIBRARY})
+
+find_package(ModelE REQUIRED)
+include_directories(${MODELE_INCLUDE_DIR})
+list(APPEND ALL_LIBS ${MODELE_LIBRARY})
 
 # -------------------------------------------
 
