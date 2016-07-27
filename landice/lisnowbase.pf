@@ -1,0 +1,345 @@
+! =============== Supporting Subroutines
+module lisnowbase_test
+    use pfunit_mod
+    use constant    ! ModelE Constants
+    use lisnowbase_mod
+    use everytrace
+    use iso_c_binding
+    implicit none
+
+interface
+    subroutine everytrace_refaddr() bind(C, name='_everytrace_refaddr')
+    end subroutine
+end interface
+
+
+CONTAINS
+
+! Enthalpy converter
+! hsn (IN): Enthalpy
+! wsn (IN): Density [kg m-2]
+! tsn (OUT): Temperature
+! isn (OUT): Liquid water fraction
+subroutine hsn_to_tsnisn(hsn,wsn,tsn,isn)
+    real*8, dimension(:),INTENT(IN) :: hsn,wsn
+    real*8, dimension(:),allocatable,INTENT(INOUT) :: tsn,isn
+    ! ----------- Locals
+    integer :: nl    ! # of layers
+    real*8 :: wlhm
+    integer :: i
+
+    nl = size(hsn)
+
+    allocate(tsn(size(hsn)))
+    allocate(isn(size(hsn)))
+
+    tsn = 0
+    isn = 0
+
+    do i=1,nl
+        wlhm = wsn(i) * LHM
+        if (hsn(i) > 0d0) then
+            tsn(i) = (hsn(i) + wsn(i) * LHM) / (wsn(i) * SHW)
+            isn(i) = 0d0
+        else if (hsn(i) > -wlhm) then
+            tsn(i) = 0d0
+            isn(i) = -hsn(i) / wlhm
+        else
+            isn(i) = 1d0
+			! This assumes the material is 100% frozen (of some density)
+			!tsn(n) = &			! [K]
+			!   (hsn(n) / wsn(n)  + LHM)   ! [J m-2] / [kg m-2] --> [J kg-1] Specific enthalpy
+			!   / csn(n)     ! / [J kg-1 K-1] = [K]
+
+			! Multiply top and bottom by wsn(n), to remove one floating point division.
+			tsn(i) = (hsn(i) + LHM * wsn(i)) / (SHI * wsn(i))
+        end if
+    end do
+end subroutine hsn_to_tsnisn
+! --------------------------------------------------
+subroutine make_sample_column(params, xin, xout)
+    type(LISnowParams) :: params
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    ! --------------------- Local Vars
+    integer :: i,nl_owned
+    double precision :: T_precip
+
+	params%max_nl_ice = 3
+
+	xin%nl_ice = params%max_nl_ice
+	params%max_nl_borrowed = 1			! Simple Dirichlet condition
+	xin%nl_borrowed = params%max_nl_borrowed	! Always
+
+	nl_owned = xin%nl_ice
+
+	call allocate_snow_adv(params, xin, xout)
+
+	! Create layers of ice with no partial melt
+	xin%dz(1) = .1d0
+	xin%dz(2:nl_owned) = 15.d0			! [m]
+    do i=1,nl_owned
+		xin%wsn(i) = xin%dz(i) * RHOI 		! [kg m-2]
+		xin%hsn(i) = -LHM * xin%wsn(i)	! 0C and fully frozen
+    end do
+
+	! Borrowed layer at bottom
+	xin%dz(nl_owned+1) = 40
+	xin%wsn(nl_owned+1) = xin%dz(nl_owned) * RHOI
+	xin%hsn(nl_owned+1) = -(LHM + SHI) * xin%wsn(nl_owned)	! -1C
+
+!	xin%csn_borrowed(:) = SHI		! [J kg-1 K-1]
+!	xin%ksn_borrowed(:) = 3.22d-6 * RHOI*RHOI
+
+	! Close to equilibrium
+	xin%hfluxes(I_SRHT) = 249.8	! [W m-2]
+
+	! Gary Russell: Sensible heat flux in Antarctica and Greenland is
+	! always going from air into the ice.  On an annual average, all
+	! the ocean and ice things, the flux is the other way.
+	! (Proportional to difference between surface air temp and ground
+	! temperature, plus wind speed, stability factor.)  It's also a
+	! little interesting in that along Eastern half cost of
+	! Antarctica, the heat flux could be 60 W/m^2 into the ice at the
+	! edges.  In the interior, it's less than that, like 20 W/m^2 into
+	! the ice.
+	xin%hfluxes(I_SNHT) = 60	! [W m-2]
+
+	! Decide on how much precipitation and evaporation Aim for a grid
+	! cell near the edge of Greenland
+	! Garry Russell: When evaporation is .5 mm/day, water vapor heat
+	!     flux is about 20 W/m^2.
+!	xin%evaporation_rate = -.005d0 / 86400d0		! [.5 mm/day --> m/s]
+!    xin%hfluxes_in(I_EVHT) = ...
+
+	xin%pr_rate = .01d0 / 86400d0				! [1 mm/day --> m/s water equivalent]
+	T_precip = -1d0
+	if (T_precip <= 0) then
+		! Wm-2  = m s-1       K     J kg-1 K-1     kg m-3
+		xin%prht = xin%pr_rate * (T_precip * SHI - LHM)
+	else
+        call stop_model('TODO: Add calc for T_precip > 0', 17)
+!		raise ValueError('TODO: Add calc for T_precip > 0')
+    end if
+
+	! Ice-atmosphere interaction runs at 30-minute timesteps
+	xin%dt = 1800	! [s]
+
+	! These are too hard to calculate for isolated model
+    xin%hfluxes_deriv(I_SNHT) = 0d0
+    xin%hfluxes_deriv(I_EVHT) = 0d0
+
+
+	! The lowest atmospheric layer in ModelE is 20 mbar thick (984 -- 964 mbar)
+	! Pressure at bottom of atmosphere = 1000 mbar ~= 100 KPa = 1e5 Pa
+	! Next 20 mbar up of air: 20 mbar ~= 2 KPa
+	! 2 KPa / g ~= 200 kg m-2      (g = 9.8 [m s-2])
+	xin%ma1 = 200		! [kg m-2]
+
+	! QSurf = 2e-3: boundary in plot
+	! Boundary of that plot goes right along the northern edge of Alaska,
+	! across Southern tip of Greenland.  Specific Humidity decreases with
+	! pressure.  At top of ice sheet, it will be ~1/4 of that.
+	xin%q1 = 2d-3
+
+end subroutine make_sample_column
+! --------------------------------------------------
+! We don't need this; snow_adv() already checks conservation
+!function check_conservation_energy(hsn0, hsn1, hfluxes_in, hfluxes_deriv, flux_corr_factor, dt) result(ret)
+!    real*8, dimension(:) :: hsn0,hsn1
+!    real*8, dimension(:) :: hfluxes_in, hfluxes_deriv
+!    real*8 :: flux_corr_factor, dt
+!    logical :: ret
+!    ! ------------- Local vars
+!    real*8, dimension(:), allocatable :: hfluxes_out
+!
+!    allocate(hfluxes_out(size(hfluxes_in)))
+!
+!    hfluxes_out = hfluxes_in + flux_corr_factor * flux_corr_factor
+!!    @assertEqual(1.0, (sum(hsn0) + sum(hfluxes_out) * dt) / (sum(hsn1)), 1d-6)
+!    ret = (abs(1d0 - &
+!        (sum(hsn0) - sum(hfluxes_out) * dt) / (sum(hsn1))) < 1d-6)
+!    print *,'hsn0', sum(hsn0)
+!    print *,'hsn1', sum(hsn1)
+!    print *,'dt',dt
+!    print *,'hfluxes_out', sum(hfluxes_out)*dt, hfluxes_out*dt
+!
+!end function check_conservation_energy
+! --------------------------------------------------
+! --------------------------------------------------
+! --------------------------------------------------
+
+! =============== Main Tests
+
+@test
+subroutine test_tester
+
+    type(LISnowParams) :: params
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    integer :: inl_owned, onl_owned
+
+    call everytrace_refaddr()
+    call everytrace_init
+    call make_sample_column(params,xin,xout)
+
+    xout%dz(:) = xin%dz(:)
+    xout%wsn(:) = xin%wsn(:)
+    xout%hsn(:) = xin%hsn(:)
+    xout%nl_ice = xin%nl_ice
+    xout%nl_borrowed = xin%nl_borrowed
+
+    inl_owned = xin%nl_ice
+    onl_owned = xout%nl_ice
+
+    @assertEqual(sum(xin%dz(1:inl_owned)), sum(xout%dz(1:onl_owned)), 1d-7)
+    @assertEqual(sum(xin%wsn(1:inl_owned)), sum(xout%wsn(1:onl_owned)), 1d-7)
+    @assertEqual(sum(xin%hsn(1:inl_owned)), sum(xout%hsn(1:onl_owned)), 1d-7)
+
+    ! Try to change it up a bit
+    xout%dz(1) = xout%dz(1) + .2d0
+    ! Instead of @assertNotEqual
+    @assertGreaterThan(abs(sum(xin%dz(1:inl_owned)) - sum(xout%dz(1:onl_owned))), 1d-7)
+
+    xout%dz(2) = xout%dz(2) - .2d0
+    @assertEqual(sum(xin%dz(1:inl_owned)), sum(xout%dz(1:onl_owned)), 1d-7)
+
+end subroutine test_tester
+
+
+@test
+subroutine test_snow_redistr
+    type(LISnowParams) :: params
+    integer :: nl_ice,nl_borrowed,nl_all
+    real*8 :: fract_cover_ratio
+    real*8,dimension(:),allocatable :: dz,wsn,hsn
+
+
+    ! ------- Set params
+	params%max_nl_ice = 3
+	params%max_nl_borrowed = 1			! Simple Dirichlet condition
+    params%max_nl = params%max_nl_ice + params%max_nl_borrowed
+
+    ! ------- Set misc
+	nl_ice = params%max_nl_ice
+	nl_borrowed = params%max_nl_borrowed	! Always
+    fract_cover_ratio = 1d0
+
+    ! ------- Set arrays
+    allocate(dz(params%max_nl))
+    allocate(wsn(params%max_nl))
+    allocate(hsn(params%max_nl))
+
+    dz = [.1d0, .02d0, .02d0, 40d0]    ! [m]
+    wsn(1) = dz(1) * RHOI * .5    ! Less dense
+    wsn(2:) = dz(2:) * RHOI     ! [kg m-2]
+    hsn = -LHM * wsn    ! 0C and fully frozen
+
+    call snow_redistr(params, dz, wsn, hsn, nl_ice, nl_borrowed, fract_cover_ratio)
+    nl_all = nl_ice + nl_borrowed
+
+    print *,'dz',dz(1:nl_all)
+    print *,'rho',wsn / dz(1:nl_all)
+    print *,'hsn',hsn(1:nl_all)
+
+end subroutine test_snow_redistr
+
+!@test
+!subroutine test_snow_adv3
+!    type(LISnowParams) :: params
+!    type(LISnowIn), target :: xin
+!    type(LISnowOut), target :: xout
+!    type(Debug_snow_adv), target :: xdebug
+!    ! ---------- Local Vars
+!    logical :: conserv
+!    integer :: i,j
+!    double precision,dimension(7),parameter :: equilib_diffs = [-5d0, -1d0, -.1d0, 0d0, .1d0, 1d0, 5d0] ! [W m-2]
+!    double precision :: srht_equilib, equilib_diff
+!    double precision :: ihsn0_total, ohsn0_total
+!!    real*8, dimension(:),allocatable :: tsn3,isn3
+!    real*8, dimension(:),allocatable :: xout_tsn,xout_isn
+!    real*8, dimension(:),allocatable :: xin_tsn,xin_isn
+!
+!    call make_sample_column(params,xin,xout)
+!
+!    ! Top two layers less dense
+!    xin%dz(1) = xin%wsn(1) / (RHOI * .8)
+!    xin%dz(2) = xin%wsn(2) / (RHOI * .9)
+!
+!    ! ------ Adjust insolation to be in equilibrium
+!    xdebug%stop_at = 0
+!    call snow_adv(params, xin, xout, xdebug)
+!    @assertEqual(0, xdebug%stopped_at)
+!    xin%hfluxes(I_SRHT) = xin%hfluxes(I_SRHT) - sum(xdebug%hfluxes0)
+!    srht_equilib = xin%hfluxes(I_SRHT)
+!
+!    ! ------ Run it
+!    do j=1,size(equilib_diffs)
+!        equilib_diff = equilib_diffs(j)    ! [W m-2]
+!        xin%hfluxes(I_SRHT) = srht_equilib + equilib_diff
+!
+!        call hsn_to_tsnisn(xin%hsn, xin%wsn, xin_tsn, xin_isn)
+!        print *,'xin_tsn', xin_tsn
+!        xdebug%stop_at = -1
+!        call snow_adv(params, xin, xout, xdebug)
+!
+!        ihsn0_total = &
+!            sum(xin%hsn) + &
+!            xin%dt * sum(xdebug%hfluxes0 + xdebug%flux_corr_factor0 * xdebug%hfluxes0_deriv)
+!        ohsn0_total = sum(xout%hsn)
+!!        call hsn_to_tsnisn(xdebug%hsn3, xdebug%wsn3, tsn3, isn3)
+!        call hsn_to_tsnisn(xout%hsn, xout%wsn, xout_tsn, xout_isn)
+!        print *,'xout_tsn',xout_tsn
+!
+!        call xin%dump
+!        conserv = check_conservation_energy( &
+!            xin%hsn, xout%hsn, xdebug%hfluxes0, &
+!            xdebug%hfluxes0_deriv, xdebug%flux_corr_factor0, xin%dt)
+!        print *,'xin%hsn',xin%hsn
+!        print *,'xout%hsn',xout%hsn
+!        @assertTrue(conserv)
+!
+!        ! Check conservation on snow_redistr()
+!!        @assertEqual(1d0, sum(xdebug%hsn4) / sum(xdebug%hsn3), 1d-7)
+!!        @assertEqual(1d0, sum(xdebug%wsn4) / sum(xdebug%wsn3), 1d-7)
+!!        @assertEqual(1d0, sum(xdebug%dz4) / sum(xdebug%dz3), 1d-7)
+!!        @assertEqual(.1d0, xdebug%dz4(0), 1d-7)
+!
+!!        ! Make sure repack process is sensible
+!!        do i=1,4
+!!            @assertTrue(xdebug%dz5(i) <= xdebug%dz4(i))
+!!        end do
+!    end do
+!
+!end subroutine test_snow_adv3
+
+
+
+
+@test
+subroutine test_sample
+
+    type(LISnowParams) :: params
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+
+    print *,'---------------- BEGIN test_sample'
+    call make_sample_column(params,xin,xout)
+    print *,params
+    print *,xin%dz
+
+end subroutine test_sample
+
+
+
+
+
+@test
+subroutine testLisnowbase
+    use constant    ! ModelE Constants
+implicit none
+    @assertEqual(LHM, 3.34d5)
+end subroutine testLisnowbase
+
+end module lisnowbase_test
+
