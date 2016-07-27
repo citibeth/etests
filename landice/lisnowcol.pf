@@ -1,0 +1,37 @@
+@test
+subroutine test_redistribute()
+    use pfunit_mod
+    use LISnowCol_mod
+    use LISnowParams_mod
+implicit none
+
+    type(LISnowCol) :: xcol, xcol0
+
+    params%MAX_NL_ICE = 5
+    params%MAX_NL_BORROWED = 2
+    params%MIN_SNOW_THICKNESS = 
+    params%TARGET_NL_ICE = 5
+    params%EPS = 1d-8
+
+
+    xcol%allocate(params)
+
+    xcol%i = 1
+    xcol%j = 1
+    xcol%ihp = 1
+    xcol%nl_ice = 5
+    xcol%nl_borrowed = 1
+    xcol%nl_borrowed_heat = 1
+
+    xcol%dz = /0.28729092185735555d0, .1d0, 2.9d0, 3.0d0, 3.7127090781426446d0, 0d0, 0d0/
+    xcol%hsn = /-32224400.728876419d0, -34270587.130668961d0, -1098799494.3396041d0, -1136689132.0754526d0, -1406732019.8942053d0, 0d0, 0d0/
+    xcol%wsn = /86.187276557206658d0, 91.66d0, 2658.14d0, 2749.8d0, 3403.0691410255481d0, 0d0, 0d0/
+
+    xcol0= xcol
+    call xcol%redistribute(params, xcol0, 1d0)
+
+    ! Check for conservation of mass, energy and volume
+    @assertEqual(sum(xcol0%dz), sum(xcol%dz))
+    @assertEqual(sum(xcol0%wsn), sum(xcol%wsn))
+    @assertEqual(sum(xcol0%hsn), sum(xcol%hsn))
+end subroutine test_redistribute
