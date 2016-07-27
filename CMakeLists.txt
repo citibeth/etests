@@ -21,6 +21,10 @@ find_package(pFUnit REQUIRED)
 include_directories(${PFUNIT_INCLUDE_DIR} ${PFUNIT_MOD_DIR})
 list(APPEND ALL_LIBS ${PFUNIT_LIBRARY})
 
+find_package(Everytrace REQUIRED)
+include_directories(${EVERYTRACE_INCLUDE_DIR} ${EVERYTRACE_MOD_DIR})
+list(APPEND ALL_LIBS ${EVERYTRACE_LIBRARY})
+
 find_package(ModelE REQUIRED)
 include_directories(${MODELE_INCLUDE_DIR})
 list(APPEND ALL_LIBS ${MODELE_LIBRARY})
