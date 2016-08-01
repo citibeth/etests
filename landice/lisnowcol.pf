@@ -3,10 +3,15 @@ subroutine test_redistribute()
     use pfunit_mod
     use LISnowCol_mod
     use LISnowParams_mod
+    use everytrace
+    use stop_model_mod, only : set_stop_model_ptr, stop_model_everytrace
 implicit none
 
     type(LISnowParams) :: params
     type(LISnowCol) :: xcol, xcol0
+
+    call everytrace_init
+    call set_stop_model_ptr(stop_model_everytrace)
 
     params%MAX_NL_ICE = 5
     params%MAX_NL_BORROWED = 2
@@ -15,8 +20,9 @@ implicit none
     ! params%EPS = 1d-8    ! default
 
 
-    call xcol0%allocate(params)
-    call xcol%allocate(params)
+
+    call xcol0%allocate(params%max_nl())    ! Temporary space
+    call xcol%allocate(params%max_nl())
 
     xcol%i = 1
     xcol%j = 1
@@ -30,7 +36,6 @@ implicit none
         -1136689132.0754526d0, -1406732019.8942053d0, 0d0, 0d0 /)
     xcol%wsn = (/ 86.187276557206658d0, 91.66d0, 2658.14d0, 2749.8d0, 3403.0691410255481d0, 0d0, 0d0 /)
 
-    xcol0= xcol
     call xcol%redistribute(params, xcol0, 1d0)
 
     ! Check for conservation of mass, energy and volume

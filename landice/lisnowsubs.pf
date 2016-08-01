@@ -1,0 +1,260 @@
+module lisnowsubs
+    use iso_fortran_env, only : REAL64
+    use pfunit_mod
+    use constant    ! ModelE Constants
+    use everytrace
+    use iso_c_binding
+    use LISnowParams_mod
+    use LISnowCol_mod
+    use LISnowIn_mod
+    use LISnowOut_mod
+    use lisnowsubs_mod
+implicit none
+
+CONTAINS
+
+subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    ! --------------------- Local Vars
+    integer :: i
+    double precision :: T_precip
+
+
+	params%max_nl_borrowed = 1			! Simple Dirichlet condition
+
+    call xcol%allocate(params%max_nl())
+    call xcol0%allocate(params%max_nl())
+    call xcol1%allocate(params%max_nl())
+    call xout%allocate(params)
+
+    xin%hfluxes(:) = 0d0
+    xin%hfluxes_deriv(:) = 0d0
+    xin%pr_rate = 0d0
+    xin%prht = 0d0
+
+	! The lowest atmospheric layer in ModelE is 20 mbar thick (984 -- 964 mbar)
+	! Pressure at bottom of atmosphere = 1000 mbar ~= 100 KPa = 1e5 Pa
+	! Next 20 mbar up of air: 20 mbar ~= 2 KPa
+	! 2 KPa / g ~= 200 kg m-2      (g = 9.8 [m s-2])
+	xin%ma1 = 200		! [kg m-2]
+
+	! QSurf = 2e-3: boundary in plot
+	! Boundary of that plot goes right along the northern edge of Alaska,
+	! across Southern tip of Greenland.  Specific Humidity decreases with
+	! pressure.  At top of ice sheet, it will be ~1/4 of that.
+	xin%q1 = 2d-3
+
+
+
+	xcol%nl_ice = params%max_nl_ice
+	xcol%nl_borrowed = params%max_nl_borrowed	! Always
+	xcol%nl_borrowed_heat = params%max_nl_borrowed	! Always
+
+
+	! Create layers of ice with no partial melt
+	xcol%dz(1) = .1d0
+	xcol%dz(2:xcol%nl_ice) = 15.d0			! [m]
+    do i=1,xcol%nl_ice
+		xcol%wsn(i) = xcol%dz(i) * RHOI 		! [kg m-2]
+		xcol%hsn(i) = -LHM * xcol%wsn(i)	! 0C and fully frozen
+    end do
+
+	! Borrowed layer at bottom
+	xcol%dz(xcol%nl_ice+1) = 40
+	xcol%wsn(xcol%nl_ice+1) = xcol%dz(xcol%nl_ice) * RHOI
+	xcol%hsn(xcol%nl_ice+1) = -(LHM + SHI) * xcol%wsn(xcol%nl_ice)	! -1C
+
+!	xcol%csn_borrowed(:) = SHI		! [J kg-1 K-1]
+!	xcol%ksn_borrowed(:) = 3.22d-6 * RHOI*RHOI
+
+	! Close to equilibrium
+	xin%hfluxes(I_SRHT) = 249.8	! [W m-2]
+
+	! Gary Russell: Sensible heat flux in Antarctica and Greenland is
+	! always going from air into the ice.  On an annual average, all
+	! the ocean and ice things, the flux is the other way.
+	! (Proportional to difference between surface air temp and ground
+	! temperature, plus wind speed, stability factor.)  It's also a
+	! little interesting in that along Eastern half cost of
+	! Antarctica, the heat flux could be 60 W/m^2 into the ice at the
+	! edges.  In the interior, it's less than that, like 20 W/m^2 into
+	! the ice.
+	xin%hfluxes(I_SNHT) = 60	! [W m-2]
+
+	! Decide on how much precipitation and evaporation Aim for a grid
+	! cell near the edge of Greenland
+	! Garry Russell: When evaporation is .5 mm/day, water vapor heat
+	!     flux is about 20 W/m^2.
+!	xin%evaporation_rate = -.005d0 / 86400d0		! [.5 mm/day --> m/s]
+!    xin%hfluxes_in(I_EVHT) = ...
+
+	xin%pr_rate = .01d0 / 86400d0				! [1 mm/day --> m/s water equivalent]
+	T_precip = -1d0
+	if (T_precip <= 0) then
+		! Wm-2  = m s-1       K     J kg-1 K-1     kg m-3
+		xin%prht = xin%pr_rate * (T_precip * SHI - LHM)
+	else
+        call stop_model('TODO: Add calc for T_precip > 0', 17)
+!		raise ValueError('TODO: Add calc for T_precip > 0')
+    end if
+
+	! Ice-atmosphere interaction runs at 30-minute timesteps
+	xin%dt = 1800	! [s]
+
+	! These are too hard to calculate for isolated model
+    xin%hfluxes_deriv(I_SNHT) = 60d0 ! [J m-2 s-1 K-1]
+    xin%hfluxes_deriv(I_EVHT) = -40d0
+
+
+	! The lowest atmospheric layer in ModelE is 20 mbar thick (984 -- 964 mbar)
+	! Pressure at bottom of atmosphere = 1000 mbar ~= 100 KPa = 1e5 Pa
+	! Next 20 mbar up of air: 20 mbar ~= 2 KPa
+	! 2 KPa / g ~= 200 kg m-2      (g = 9.8 [m s-2])
+	xin%ma1 = 200		! [kg m-2]
+
+	! QSurf = 2e-3: boundary in plot
+	! Boundary of that plot goes right along the northern edge of Alaska,
+	! across Southern tip of Greenland.  Specific Humidity decreases with
+	! pressure.  At top of ice sheet, it will be ~1/4 of that.
+	xin%q1 = 2d-3
+
+
+    call xcol%set_ksn(xout%ksn, KSN_ICE)
+
+end subroutine make_sample_column
+! --------------------------------------------------
+@test
+subroutine test_fischer_heat_eq
+    use lisnowsubs_mod
+
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    real(real64) :: total0,total1
+    real(real64) :: relerr
+    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
+
+    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+
+    ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
+    hfluxes_in(:) = xin%hfluxes(:)
+    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
+    xin%hfluxes(:) = 0d0
+    xin%hfluxes_deriv(:) = 0d0
+
+    call xcol0%assign(xcol)
+    call fischer_heat_eq(xcol, hfluxes_in, hfluxes_in_deriv, xin%dt, xout)
+
+
+    ! ------ Conservation formula for fischer_heat_eq
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + xin%dt * ( &
+        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
+        - xout%basal_flux_out)
+    total1 = sum(xcol%hsn(1:xcol%nl_ice))
+
+    relerr = abs((total1 - total0) / total0)
+    @assertLessThan(relerr, 1d-12)
+
+    ! Make sure correction from hfluxes_derv is noticeable
+    relerr = abs(xout%flux_corr_factor * sum(hfluxes_in_deriv) / total0)
+    @assertGreaterThan(relerr, 1d-12)
+
+end subroutine test_fischer_heat_eq
+! --------------------------------------------------
+@test
+subroutine test_precip_and_heat_no_precip
+    use lisnowsubs_mod
+
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    real(real64) :: total0,total1
+    real(real64) :: relerr
+    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
+    type(Debug_precip_and_heat) :: xdebug
+
+    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+
+    ! Turn off precipitation
+	xin%pr_rate = 0d0
+	xin%prht = 0d0
+	xin%hfluxes(I_EVHT) = 0d0
+	xin%hfluxes_deriv(I_EVHT) = 0d0
+
+    ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
+    hfluxes_in(:) = xin%hfluxes(:)
+    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
+    xin%hfluxes(:) = 0d0
+    xin%hfluxes_deriv(:) = 0d0
+
+    call xcol0%assign(xcol)
+    call precip_and_heat(xcol, xin, hfluxes_in, hfluxes_in_deriv, xout, params, xdebug)
+
+    ! ------ Conservation formula for fischer_heat_eq
+    ! (this formula ignores precip)
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + xin%dt * ( &
+        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
+        - xout%basal_flux_out)
+    total1 = sum(xcol%hsn(1:xcol%nl_ice))
+    relerr = abs((total1 - total0) / total0)
+    @assertLessThan(relerr, 1d-12)
+
+    ! ------ Conservation of mass (make sure mass hasn't changed)
+    total0 = sum(xcol0%wsn(1:xcol0%nl_ice))
+    total1 = sum(xcol%wsn(1:xcol%nl_ice))
+    @assertEqual(total0,total1)
+
+end subroutine test_precip_and_heat_no_precip
+! ------------------------------------------------------
+@test
+subroutine test_precip_and_heat
+    use lisnowsubs_mod
+
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    real(real64) :: total0,total1
+    real(real64) :: relerr
+    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
+    real(real64) :: dConduct, dAdvect
+    type(Debug_precip_and_heat) :: xdebug
+
+    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+
+    ! Include precipitation in this test
+    ! (it already came from make_sample_column())
+
+    ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
+    hfluxes_in(:) = xin%hfluxes(:)
+    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
+    xin%hfluxes(:) = 0d0
+    xin%hfluxes_deriv(:) = 0d0
+
+    call xcol0%assign(xcol)
+    call precip_and_heat(xcol, xin, hfluxes_in, hfluxes_in_deriv, xout, params, xdebug)
+
+    ! ----- Conservation of mass for precip_and_heat
+    total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
+    total1 = sum(xcol%wsn(1:xcol%nl_ice))
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+
+    ! ----- Conservation of energy for precip_and_heat
+    dConduct = xin%dt * ( &
+        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
+        - xout%basal_flux_out)
+    dAdvect = xout%adv_in_heat - xout%adv_out_heat
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
+    total1 = sum(xcol%hsn(1:xcol%nl_ice))
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+end subroutine test_precip_and_heat
+
+
+end module lisnowsubs

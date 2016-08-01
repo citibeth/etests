@@ -4,7 +4,7 @@ set(SOURCES ${PFUNIT_INCLUDE_DIR}/driver.F90)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 
-set(PF_SOURCES helloWorld.pf lisnowcol.pf)
+set(PF_SOURCES helloWorld.pf lisnowcol.pf remap1d.pf lisnowsubs.pf)
 #file(GLOB PF_SOURCES "*.pf")
 foreach (src_pf ${PF_SOURCES})
    get_filename_component (src_bare ${src_pf} NAME_WE)

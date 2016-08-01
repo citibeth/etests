@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)  # Can probably use older
 project (etest)
 enable_language(Fortran)
+enable_language(C)
 
 # Where to look first for project cmake modules,
 # before ${CMAKE_ROOT}/Modules/ is checked
