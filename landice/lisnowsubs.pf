@@ -255,6 +255,41 @@ subroutine test_precip_and_heat
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
 end subroutine test_precip_and_heat
+! ------------------------------------------------------
+@test
+subroutine test_snow_adv
+    use lisnowsubs_mod
+
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+    real(real64) :: total0,total1
+    real(real64) :: relerr
+    real(real64) :: dConduct, dAdvect
+
+    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+    call snow_adv(xcol, xin, xout, params, xcol0, xcol1)
+
+    print *,'xin%hfluxes',xin%hfluxes
+    print *,'xout%hfluxes',xout%hfluxes
+
+    ! ----- Conservation of mass for snow_adv
+    total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
+    total1 = sum(xcol%wsn(1:xcol%nl_ice))
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+
+    ! ----- Conservation of energy for snow_adv
+    dConduct = xin%dt * ( &
+        + sum(xout%hfluxes) &
+        - xout%basal_flux_out)
+    dAdvect = xout%adv_in_heat - xout%adv_out_heat
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
+    total1 = sum(xcol%hsn(1:xcol%nl_ice))
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+end subroutine test_snow_adv
 
 
 end module lisnowsubs

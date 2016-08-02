@@ -10,9 +10,10 @@ implicit none
 
     integer, dimension(:,:), allocatable :: overlap_ix
     real(real64), dimension(:), allocatable :: overlap_val
+    reaL(real64), dimension(:), allocatable :: sumA, sumB
     integer :: n
 
-    integer ::i
+    integer ::i,ai,bi
     real(real64) :: xsum
 
 !    dzA = (/ 0.1d0,.5d0,1.2d0,1.2d0,2.d0,3d0,3.4d0,4.2d0 /)
@@ -20,15 +21,35 @@ implicit none
 
     dzA = (/ .4d0, .7d0, 0d0, .8d0, 1d0, .4d0, .8d0 /)
     dzB = (/ .05d0, .01d0, .94d0, 1d0, 1d0, 1.1d0 /)
+    n = size(dzA) + size(dzB) + 1
+    allocate(overlap_ix(2,n))
+    allocate(overlap_val(n))
+    allocate(sumA(size(dzA)))
+    allocate(sumB(size(dzB)))
 
     call overlap1d(dzA, dzB, overlap_ix, overlap_val, n)
 
-    xsum = 0d0
+    ! ---------------------------------------------
+    ! Check that regridding matrix implied by overlap matrix sums to 1
+    sumA = 0d0
+    sumB = 0d0
     do i=1,n
-        print *,overlap_ix(:,i), overlap_val(i)
-        xsum = xsum + overlap_val(i)
+        ai = overlap_ix(1,i)
+        bi = overlap_ix(2,i)
+        sumA(ai) = sumA(ai) + overlap_val(i) / dzA(ai)
+        sumB(bi) = sumB(bi) + overlap_val(i) / dzB(bi)
     end do
-    print *,'sum',sum(dzA),sum(dzB),xsum
+
+    do i=1,size(dzA)
+        if (dzA(i) /= 0d0) then
+            @assertEqual(1d0, sumA(i), 1d-12)
+        end if
+    end do
+
+    do i=1,size(dzB)
+        @assertEqual(1d0,sumB(i),1d-12)
+    end do
+
 end subroutine test_remap1d
 
 

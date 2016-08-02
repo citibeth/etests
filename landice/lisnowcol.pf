@@ -39,7 +39,7 @@ implicit none
     call xcol%redistribute(params, xcol0, 1d0)
 
     ! Check for conservation of mass, energy and volume
-    @assertEqual(sum(xcol0%dz), sum(xcol%dz))
-    @assertEqual(sum(xcol0%wsn), sum(xcol%wsn))
-    @assertEqual(sum(xcol0%hsn), sum(xcol%hsn))
+    @assertEqual(sum(xcol0%dz), sum(xcol%dz), sum(xcol0%dz)*1d-12)
+    @assertEqual(sum(xcol0%wsn), sum(xcol%wsn), sum(xcol0%wsn)*1d-12)
+    @assertEqual(sum(xcol0%hsn), sum(xcol%hsn), sum(xcol0%hsn)*1d-12)
 end subroutine test_redistribute
