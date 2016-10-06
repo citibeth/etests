@@ -1,3 +1,19 @@
+module lisnowcol_tests
+    use iso_fortran_env, only : REAL64
+    use pfunit_mod
+    use constant    ! ModelE Constants
+    use everytrace
+    use iso_c_binding
+    use LISnowParams_mod
+    use LISnowCol_mod
+    use LISnowIn_mod
+    use LISnowOut_mod
+    use lisnowsubs_mod
+implicit none
+
+CONTAINS
+
+
 @test
 subroutine test_redistribute()
     use pfunit_mod
@@ -43,3 +59,86 @@ implicit none
     @assertEqual(sum(xcol0%wsn), sum(xcol%wsn), sum(xcol0%wsn)*1d-12)
     @assertEqual(sum(xcol0%hsn), sum(xcol%hsn), sum(xcol0%hsn)*1d-12)
 end subroutine test_redistribute
+! -----------------------------------------------------
+@test
+subroutine test_adjust_depth()
+    type(LISnowParams) :: params
+    type(LISnowCol) :: xcol, xcol0
+    real(real64) :: volxfer, massxfer, enthxfer
+
+!    call everytrace_init
+!    call set_stop_model_ptr(stop_model_everytrace)
+
+    params%MAX_NL_ICE = 5
+    params%MAX_NL_BORROWED = 2
+    ! params%MIN_SNOW_THICKNESS = .1d0    ! default
+    params%TARGET_NL_ICE = 5
+    ! params%EPS = 1d-8    ! default
+
+
+    call xcol0%allocate(params%max_nl())    ! Temporary space
+    call xcol%allocate(params%max_nl())
+
+    xcol%i = 1
+    xcol%j = 1
+    xcol%ihp = 1
+    xcol%nl_ice = 5
+    xcol%nl_borrowed = 1
+    xcol%nl_borrowed_heat = 1
+
+    xcol%dz = (/ 0.28729092185735555d0, .1d0, 2.9d0, 3.0d0, 3.7127090781426446d0, .1d0, 0d0 /)
+    xcol%hsn = (/ -32224400.728876419d0, -34270587.130668961d0, -1098799494.3396041d0, &
+        -1136689132.0754526d0, -1406732019.8942053d0, -34270587.130668961d0, 0d0 /)
+    xcol%wsn = (/ 86.187276557206658d0, 91.66d0, 2658.14d0, 2749.8d0, 3403.0691410255481d0, 91.66d0, 0d0 /)
+
+! Remove snow
+    call xcol%adjust_depth(params, 9.8d0, volxfer, massxfer, enthxfer, .false.)
+
+!    ! Add snow
+!    call xcol%adjust_depth(params, 10.1d0, volxfer, massxfer, enthxfer, .false.)
+
+    print *,'xfer2',volxfer, massxfer, enthxfer
+end subroutine test_adjust_depth
+! -----------------------------------------------------
+@test
+subroutine test_add_snow
+    type(LISnowParams) :: params
+    type(LISnowCol) :: xcol, xcol0
+    real(real64) :: volxfer, massxfer, enthxfer
+    real(real64) :: V,M,H
+
+    params%rho_fresh_snow = 150.00000000000000
+    params%rho_snow_firn_cutoff = 400.00000000000000
+    params%max_fract_water = 5.5000000000000000E-002
+    params%TARGET_NL_ICE = 5
+    params%MAX_NL_ICE = 6
+    params%DIRICHLET_BOTTOM_BC = .false.
+    params%MAX_NL_BORROWED = 1
+    params%EPS = 1.0000000000000000E-008
+    params%MIN_SNOW_THICKNESS = 0.10000000000000001
+    params%MIN_FRACT_COVER = 1.0000000000000000E-004
+    params%TARGET_DEPTH = 10.000000000000000
+
+    call xcol0%allocate(params%max_nl())    ! Temporary space
+    call xcol%allocate(params%max_nl())
+
+    ! xcol%(i,j,ihp) = (/1, 1, 1/)
+    xcol%nl_ice = 5
+    xcol%nl_borrowed = 1
+    xcol%nl_borrowed_heat = 0
+    xcol%dz = (/9.9999768782918899E-002, 2.4749999966258662, 2.4750000000000005, &
+        2.4749999999999996, 2.4749999999999996, 2.3400964721531636E-007, 2.3400964721531636E-007/)
+    xcol%wsn = (/30.040049851001790, 2153.1033543141307, 2268.5850000000005, 2268.5849999999996, &
+        2268.5849999999996, 2.1449324263755892E-004, 2.1449324263755892E-004/)
+    xcol%hsn = (/-12021459.531235149, -883395606.84569931, -937641637.65366161, -937767258.13209808, &
+        -937768525.27128708, -88.665407596820245, -88.665407596820245/)
+
+    V = 2.3400964721531636E-007
+    M = 2.1449324263755892E-004
+    H = -88.665407596820245
+
+    call xcol%add_snow(params, V,M,H)
+end subroutine test_add_snow
+
+end module lisnowcol_tests
+

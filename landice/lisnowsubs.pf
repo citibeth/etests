@@ -13,7 +13,8 @@ implicit none
 
 CONTAINS
 
-subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+! Cooked up example
+subroutine make_sample_column_x(params, xcol, xin, xout, xcol0, xcol1)
     type(LISnowParams) :: params
     type(LISnowCol), target :: xcol0, xcol1, xcol
     type(LISnowIn), target :: xin
@@ -122,11 +123,75 @@ subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
 	xin%q1 = 2d-3
 
 
-    call xcol%set_ksn(xout%ksn, KSN_ICE)
+    call xcol%get_ksn(xout%ksn, KSN_ICE)
 
-end subroutine make_sample_column
+end subroutine
 ! --------------------------------------------------
-@test
+
+! This is a column that failed in the wild
+subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+    type(LISnowParams) :: params
+    type(LISnowCol), target :: xcol0, xcol1, xcol
+    type(LISnowIn), target :: xin
+    type(LISnowOut), target :: xout
+
+    call xcol%allocate(params%max_nl())
+    call xcol0%allocate(params%max_nl())
+    call xcol1%allocate(params%max_nl())
+    call xout%allocate(params)
+
+
+	xcol%i = 39
+	xcol%j = 83
+	xcol%ihp = 1
+	xcol%nl_ice = 5
+	xcol%nl_borrowed = 1
+	xcol%nl_borrowed_heat = 0
+
+	xcol%dz = (/ 0.10000000000000001  ,      2.4750000000000001   ,     2.4750000000000001 ,       2.4750000000000001    ,    &
+	2.4750000000000001   ,     2.4750000000000001   ,     0.0000000000000000/)
+
+	xcol%wsn = (/   30.000000000000000  ,      2145.2038683053161  ,      2268.5850000000009,        2268.5850000000000,    &
+	    2268.5850000000000,        2268.5850000000000,        0.0000000000000000     /)
+
+	xcol%hsn = (/ -10407324.818962364 ,      -785471422.23654389  ,     -833969189.51973581,       -833969189.51973557 ,   &
+	   -833969189.51973557,       -833969189.51973557,        0.0000000000000000      /)
+
+	xin%dt =  900.00000000000000     
+	xin%hfluxes = (/  0.0000000000000000  ,     -112.02938041379687,       -5678.2772395641032   ,    -1241.0273605495247     /)
+
+	xin%hfluxes_deriv = (/ 0.0000000000000000 ,      -4.3115403485952362 ,      -365.65526151859683 ,      -173.46325006726047     /)
+! These are fine, they don't have to be zeroed out.
+!!!xin%hfluxes_deriv(I_TRHT) = 0d0
+!!!xin%hfluxes_deriv(I_SNHT) = 0d0
+
+! I_EVHT is causing problems!!!
+!xin%hfluxes_deriv(I_EVHT) = 0d0
+
+
+	xin%pr_rate =  0.0000000000000000     
+	xin%prht =  0.0000000000000000     
+	xin%ma1 =  211.53995075152321     
+	xin%Q1 =  4.2611598205066818E-004
+
+	params%rho_fresh_snow  = 150.00000000000000     
+	params%rho_snow_firn_cutoff =  400.00000000000000     
+	params%max_fract_water =  5.5000000000000000E-002
+	params%TARGET_NL_ICE   =        5
+	params%MAX_NL_ICE      =     6
+	params%DIRICHLET_BOTTOM_BC = .false.
+	params%MAX_NL_BORROWED    =       1
+	params%EPS =  1.0000000000000000E-008
+	params%MIN_SNOW_THICKNESS=  0.10000000000000001     
+	params%MIN_FRACT_COVER =  1.0000000000000000E-004
+	params%TARGET_DEPTH =  10.000000000000000     
+
+end subroutine
+
+
+
+
+!@test
 subroutine test_fischer_heat_eq
     use lisnowsubs_mod
 
@@ -156,6 +221,7 @@ subroutine test_fischer_heat_eq
         - xout%basal_flux_out)
     total1 = sum(xcol%hsn(1:xcol%nl_ice))
 
+print *,'total0',total0,total1
     relerr = abs((total1 - total0) / total0)
     @assertLessThan(relerr, 1d-12)
 
@@ -165,7 +231,7 @@ subroutine test_fischer_heat_eq
 
 end subroutine test_fischer_heat_eq
 ! --------------------------------------------------
-@test
+!@test
 subroutine test_precip_and_heat_no_precip
     use lisnowsubs_mod
 
@@ -211,7 +277,7 @@ subroutine test_precip_and_heat_no_precip
 
 end subroutine test_precip_and_heat_no_precip
 ! ------------------------------------------------------
-@test
+!@test
 subroutine test_precip_and_heat
     use lisnowsubs_mod
 
@@ -277,6 +343,7 @@ subroutine test_snow_adv
     ! ----- Conservation of mass for snow_adv
     total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
     total1 = sum(xcol%wsn(1:xcol%nl_ice))
+print *,'total',total0,total1
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
 
