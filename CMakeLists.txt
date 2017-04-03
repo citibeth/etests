@@ -13,7 +13,7 @@ include(PreventInSourceBuild)
 include(setup_rpath)
 
 # -------------------------------------------
-# Take location of ModelE from Ectl
+# Take location of ModelE from ModelE-Control
 if (NOT DEFINED MODELE_ROOT)
     set(MODELE_ROOT $ENV{ECTL_PKG})
 endif()

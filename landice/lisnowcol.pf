@@ -23,8 +23,8 @@ subroutine test_redistribute()
     use stop_model_mod, only : set_stop_model_ptr, stop_model_everytrace
 implicit none
 
-    type(LISnowParams) :: params
-    type(LISnowCol) :: xcol, xcol0
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t) :: xcol, xcol0
 
     call everytrace_init
     call set_stop_model_ptr(stop_model_everytrace)
@@ -62,8 +62,8 @@ end subroutine test_redistribute
 ! -----------------------------------------------------
 @test
 subroutine test_adjust_depth()
-    type(LISnowParams) :: params
-    type(LISnowCol) :: xcol, xcol0
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t) :: xcol, xcol0
     real(real64) :: volxfer, massxfer, enthxfer
 
 !    call everytrace_init
@@ -102,8 +102,8 @@ end subroutine test_adjust_depth
 ! -----------------------------------------------------
 @test
 subroutine test_add_snow
-    type(LISnowParams) :: params
-    type(LISnowCol) :: xcol, xcol0
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t) :: xcol, xcol0
     real(real64) :: volxfer, massxfer, enthxfer
     real(real64) :: V,M,H
 

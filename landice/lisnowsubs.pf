@@ -15,10 +15,10 @@ CONTAINS
 
 ! Cooked up example
 subroutine make_sample_column_x(params, xcol, xin, xout, xcol0, xcol1)
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
     ! --------------------- Local Vars
     integer :: i
     double precision :: T_precip
@@ -130,10 +130,10 @@ end subroutine
 
 ! This is a column that failed in the wild
 subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
 
     call xcol%allocate(params%max_nl())
     call xcol0%allocate(params%max_nl())
@@ -195,10 +195,10 @@ end subroutine
 subroutine test_fischer_heat_eq
     use lisnowsubs_mod
 
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
     real(real64) :: total0,total1
     real(real64) :: relerr
     real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
@@ -235,10 +235,10 @@ end subroutine test_fischer_heat_eq
 subroutine test_precip_and_heat_no_precip
     use lisnowsubs_mod
 
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
     real(real64) :: total0,total1
     real(real64) :: relerr
     real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
@@ -281,10 +281,10 @@ end subroutine test_precip_and_heat_no_precip
 subroutine test_precip_and_heat
     use lisnowsubs_mod
 
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
     real(real64) :: total0,total1
     real(real64) :: relerr
     real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
@@ -326,10 +326,10 @@ end subroutine test_precip_and_heat
 subroutine test_snow_adv
     use lisnowsubs_mod
 
-    type(LISnowParams) :: params
-    type(LISnowCol), target :: xcol0, xcol1, xcol
-    type(LISnowIn), target :: xin
-    type(LISnowOut), target :: xout
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
     real(real64) :: total0,total1
     real(real64) :: relerr
     real(real64) :: dConduct, dAdvect
