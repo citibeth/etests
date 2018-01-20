@@ -189,6 +189,61 @@ subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
 end subroutine
 
 
+! This is a column that failed in the wild
+subroutine make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
+
+    call xcol%allocate(params%max_nl())
+    call xcol0%allocate(params%max_nl())
+    call xcol1%allocate(params%max_nl())
+    call xout%allocate(params)
+
+
+    params%rho_fresh_snow = 150.00000000000000d0
+    params%rho_snow_firn_cutoff = 450.00000000000000d0
+    params%max_fract_water = 5.5000000000000000d-002
+    params%TARGET_NL_ICE = 4
+    params%MAX_NL_ICE = 5
+    params%DIRICHLET_BOTTOM_BC = .false.
+    params%MAX_NL_BORROWED = 1
+    params%EPS = 1.0000000000000000d-008
+    params%MIN_SNOW_THICKNESS = 0.10000000000000001d0
+    params%MIN_FRACT_COVER = 1.0000000000000000d-004
+    params%TARGET_DEPTH = 10.000000000000000d0
+    params%dump_forcing = .false.
+
+    xcol%i=58
+    xcol%j=79
+    xcol%ihp=14
+    xcol%nl_ice = 4
+    xcol%nl_borrowed = 1
+    xcol%nl_borrowed_heat = 1
+    xcol%dz = (/0.10000000000000001d0,3.3000000000000003d0, &
+        3.3000000000000003d0,3.3000000000000003d0,3.3000000000000003d0, &
+        3.3000000000000003d0/)
+    xcol%wsn = (/16.260421865641362d0,2913.1998183178207d0, &
+        3022.0516456453925d0,3024.7540670636827d0,3024.7799999999988d0,3024.7799999999988d0/)
+    xcol%hsn = (/-6326070.6301320214d0,-1070325204.9425319d0,-1063844964.1155030d0, &
+        -957610277.67831039d0,-523211901.72276765d0,-523211901.72276765d0/)
+    xin%dt = 900.00000000000000d0
+!    xin%hfluxes = (/0.0000000000000000d0,-45.658689869108855d0, &
+!        18.213411477806982d0,4.5541404193169885d0/)
+!    xin%hfluxes_deriv = (/0.0000000000000000d0,-3.3942377013218334d0, &
+!        -8.8987442544935664d0,-0.96319348622397238d0/)
+xin%hfluxes = (/0d0,0d0,0d0,0d0/)
+xin%hfluxes_deriv = (/0d0,0d0,0d0,0d0/)
+!    xin%pr_rate = 4.8049631298944034d-006
+!    xin%prht = -1.6048576853847307d0
+xin%pr_rate = 0d0
+xin%prht = 0d0
+    xin%ma1 = 152.31659338172645d0
+    xin%Q1 = 9.0482982185801860d-004
+
+
+end subroutine
 
 
 !@test
@@ -277,7 +332,7 @@ subroutine test_precip_and_heat_no_precip
 
 end subroutine test_precip_and_heat_no_precip
 ! ------------------------------------------------------
-!@test
+@test
 subroutine test_precip_and_heat
     use lisnowsubs_mod
 
@@ -357,6 +412,103 @@ print *,'total',total0,total1
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
 end subroutine test_snow_adv
+! ------------------------------------------------------------
+@test
+subroutine test_snow_adv2
+    use lisnowsubs_mod
 
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
+    real(real64) :: total0,total1
+    real(real64) :: relerr
+    real(real64) :: dConduct, dAdvect
+
+    call make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
+    call snow_adv(xcol, xin, xout, params, xcol0, xcol1)
+
+    print *,'xin%hfluxes',xin%hfluxes
+    print *,'xout%hfluxes',xout%hfluxes
+
+    ! ----- Conservation of mass for snow_adv
+    total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
+    total1 = sum(xcol%wsn(1:xcol%nl_ice))
+print *,'total',total0,total1
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+
+    ! ----- Conservation of energy for snow_adv
+    dConduct = xin%dt * ( &
+        + sum(xout%hfluxes) &
+        - xout%basal_flux_out)
+    dAdvect = xout%adv_in_heat - xout%adv_out_heat
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
+    total1 = sum(xcol%hsn(1:xcol%nl_ice))
+    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
+
+end subroutine test_snow_adv2
+! ------------------------------------------------------------
+! A test case from real life (2017-04-03) in which conservation in snow_adv() fails
+!@test
+subroutine test_zero_problem
+    use lisnowsubs_mod
+
+    type(LISnowParams_t) :: params
+    type(LISnowCol_t), target :: xcol0, xcol1, xcol
+    type(LISnowIn_t), target :: xin
+    type(LISnowOut_t), target :: xout
+
+    params%rho_fresh_snow = 150.00000000000000d0
+    params%rho_snow_firn_cutoff = 450.00000000000000d0
+    params%max_fract_water = 5.5000000000000000d-002
+    params%TARGET_NL_ICE = 4
+    params%MAX_NL_ICE = 5
+    params%DIRICHLET_BOTTOM_BC = .true.
+    params%MAX_NL_BORROWED = 2
+    params%EPS = 1.0000000000000000d-008
+    params%MIN_SNOW_THICKNESS = 0.10000000000000001d0
+    params%MIN_FRACT_COVER = 1.0000000000000000d-004
+    params%TARGET_DEPTH = 10.000000000000000d0
+    params%dump_forcing = .false.
+
+
+
+    xin%dt = 900.00000000000000d0
+    xin%hfluxes = (/0.0000000000000000d0,-104.51203468328217d0,&
+        -372.92170269154207d0,-399.58681869995655d0/)
+    xin%hfluxes_deriv = (/0.0000000000000000d0,-4.6224822258585601d0,&
+        -141.51385701811219d0,-107.94381585521192d0/)
+    xin%pr_rate = 0.0000000000000000d0
+    xin%prht = 0.0000000000000000d0
+    xin%ma1 = 213.17131003601705d0
+    xin%Q1 = 2.0342775114851543d-003
+
+
+
+    call xcol%allocate(params%max_nl())
+    call xcol0%allocate(params%max_nl())
+    call xcol1%allocate(params%max_nl())
+    call xout%allocate(params)
+
+    xcol%i=51
+    xcol%j=79
+    xcol%ihp=1
+    xcol%nl_ice = 4
+    xcol%nl_borrowed = 1
+    xcol%nl_borrowed_heat = 0
+    xcol%dz = (/0.10000000000000001d0,3.3000000000000003d0,3.3000000000000003d0,&
+        3.3000000000000003d0,3.3000000000000003d0,0.0000000000000000d0,0.0000000000000000d0/)
+    xcol%wsn = (/91.660000000000011d0,3024.7800000000002d0,3024.7800000000007d0,&
+        3024.7799999999993d0,3024.7799999999993d0,0.0000000000000000d0,0.0000000000000000d0/)
+    xcol%hsn = (/0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0,&
+        0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0/)
+
+    call snow_adv(xcol,xin,xout,params,xcol0,xcol1)
+
+
+    call xcol%dump()
+
+end subroutine test_zero_problem
 
 end module lisnowsubs
