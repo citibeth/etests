@@ -8,7 +8,6 @@ module lisnowcol_tests
     use LISnowCol_mod
     use LISnowIn_mod
     use LISnowOut_mod
-    use lisnowsubs_mod
 implicit none
 
 CONTAINS
@@ -42,7 +41,7 @@ implicit none
 
     xcol%i = 1
     xcol%j = 1
-    xcol%ihp = 1
+    xcol%ihc = 1
     xcol%nl_ice = 5
     xcol%nl_borrowed = 1
     xcol%nl_borrowed_heat = 1
@@ -81,7 +80,7 @@ subroutine test_adjust_depth()
 
     xcol%i = 1
     xcol%j = 1
-    xcol%ihp = 1
+    xcol%ihc = 1
     xcol%nl_ice = 5
     xcol%nl_borrowed = 1
     xcol%nl_borrowed_heat = 1
@@ -122,7 +121,7 @@ subroutine test_add_snow
     call xcol0%allocate(params%max_nl())    ! Temporary space
     call xcol%allocate(params%max_nl())
 
-    ! xcol%(i,j,ihp) = (/1, 1, 1/)
+    ! xcol%(i,j,ihc) = (/1, 1, 1/)
     xcol%nl_ice = 5
     xcol%nl_borrowed = 1
     xcol%nl_borrowed_heat = 0

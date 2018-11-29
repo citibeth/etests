@@ -8,7 +8,7 @@ module lisnowsubs
     use LISnowCol_mod
     use LISnowIn_mod
     use LISnowOut_mod
-    use lisnowsubs_mod
+    use LISnow_mod
 implicit none
 
 CONTAINS
@@ -29,12 +29,12 @@ subroutine make_sample_column_x(params, xcol, xin, xout, xcol0, xcol1)
     call xcol%allocate(params%max_nl())
     call xcol0%allocate(params%max_nl())
     call xcol1%allocate(params%max_nl())
-    call xout%allocate(params)
+    call xout%allocate(params%max_nl())
 
     xin%hfluxes(:) = 0d0
-    xin%hfluxes_deriv(:) = 0d0
+    xin%dhfluxes_dT(:) = 0d0
     xin%pr_rate = 0d0
-    xin%prht = 0d0
+    xin%prht_rate = 0d0
 
 	! The lowest atmospheric layer in ModelE is 20 mbar thick (984 -- 964 mbar)
 	! Pressure at bottom of atmosphere = 1000 mbar ~= 100 KPa = 1e5 Pa
@@ -90,24 +90,24 @@ subroutine make_sample_column_x(params, xcol, xin, xout, xcol0, xcol1)
 	! Garry Russell: When evaporation is .5 mm/day, water vapor heat
 	!     flux is about 20 W/m^2.
 !	xin%evaporation_rate = -.005d0 / 86400d0		! [.5 mm/day --> m/s]
-!    xin%hfluxes_in(I_EVHT) = ...
+!    xin%hfluxes_in(I_DWHT) = ...
 
 	xin%pr_rate = .01d0 / 86400d0				! [1 mm/day --> m/s water equivalent]
 	T_precip = -1d0
 	if (T_precip <= 0) then
 		! Wm-2  = m s-1       K     J kg-1 K-1     kg m-3
-		xin%prht = xin%pr_rate * (T_precip * SHI - LHM)
+		xin%prht_rate = xin%pr_rate * (T_precip * SHI - LHM)
 	else
         call stop_model('TODO: Add calc for T_precip > 0', 17)
 !		raise ValueError('TODO: Add calc for T_precip > 0')
     end if
 
 	! Ice-atmosphere interaction runs at 30-minute timesteps
-	xin%dt = 1800	! [s]
+	xin%dtsurf = 1800	! [s]
 
 	! These are too hard to calculate for isolated model
-    xin%hfluxes_deriv(I_SNHT) = 60d0 ! [J m-2 s-1 K-1]
-    xin%hfluxes_deriv(I_EVHT) = -40d0
+    xin%dhfluxes_dT(I_SNHT) = 60d0 ! [J m-2 s-1 K-1]
+    xin%dhfluxes_dT(I_DWHT) = -40d0
 
 
 	! The lowest atmospheric layer in ModelE is 20 mbar thick (984 -- 964 mbar)
@@ -123,7 +123,7 @@ subroutine make_sample_column_x(params, xcol, xin, xout, xcol0, xcol1)
 	xin%q1 = 2d-3
 
 
-    call xcol%get_ksn(xout%ksn, KSN_ICE)
+    call xcol%set_ksn
 
 end subroutine
 ! --------------------------------------------------
@@ -138,12 +138,12 @@ subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
     call xcol%allocate(params%max_nl())
     call xcol0%allocate(params%max_nl())
     call xcol1%allocate(params%max_nl())
-    call xout%allocate(params)
+    call xout%allocate(params%max_nl())
 
 
 	xcol%i = 39
 	xcol%j = 83
-	xcol%ihp = 1
+	xcol%ihc = 1
 	xcol%nl_ice = 5
 	xcol%nl_borrowed = 1
 	xcol%nl_borrowed_heat = 0
@@ -157,20 +157,20 @@ subroutine make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
 	xcol%hsn = (/ -10407324.818962364 ,      -785471422.23654389  ,     -833969189.51973581,       -833969189.51973557 ,   &
 	   -833969189.51973557,       -833969189.51973557,        0.0000000000000000      /)
 
-	xin%dt =  900.00000000000000     
+	xin%dtsurf =  900.00000000000000     
 	xin%hfluxes = (/  0.0000000000000000  ,     -112.02938041379687,       -5678.2772395641032   ,    -1241.0273605495247     /)
 
-	xin%hfluxes_deriv = (/ 0.0000000000000000 ,      -4.3115403485952362 ,      -365.65526151859683 ,      -173.46325006726047     /)
+	xin%dhfluxes_dT = (/ 0.0000000000000000 ,      -4.3115403485952362 ,      -365.65526151859683 ,      -173.46325006726047     /)
 ! These are fine, they don't have to be zeroed out.
-!!!xin%hfluxes_deriv(I_TRHT) = 0d0
-!!!xin%hfluxes_deriv(I_SNHT) = 0d0
+!!!xin%dhfluxes_dT(I_TRHT) = 0d0
+!!!xin%dhfluxes_dT(I_SNHT) = 0d0
 
-! I_EVHT is causing problems!!!
-!xin%hfluxes_deriv(I_EVHT) = 0d0
+! I_DWHT is causing problems!!!
+!xin%dhfluxes_dT(I_DWHT) = 0d0
 
 
 	xin%pr_rate =  0.0000000000000000     
-	xin%prht =  0.0000000000000000     
+	xin%prht_rate =  0.0000000000000000     
 	xin%ma1 =  211.53995075152321     
 	xin%Q1 =  4.2611598205066818E-004
 
@@ -199,7 +199,7 @@ subroutine make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
     call xcol%allocate(params%max_nl())
     call xcol0%allocate(params%max_nl())
     call xcol1%allocate(params%max_nl())
-    call xout%allocate(params)
+    call xout%allocate(params%max_nl())
 
 
     params%rho_fresh_snow = 150.00000000000000d0
@@ -217,7 +217,7 @@ subroutine make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
 
     xcol%i=58
     xcol%j=79
-    xcol%ihp=14
+    xcol%ihc=14
     xcol%nl_ice = 4
     xcol%nl_borrowed = 1
     xcol%nl_borrowed_heat = 1
@@ -228,17 +228,17 @@ subroutine make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
         3022.0516456453925d0,3024.7540670636827d0,3024.7799999999988d0,3024.7799999999988d0/)
     xcol%hsn = (/-6326070.6301320214d0,-1070325204.9425319d0,-1063844964.1155030d0, &
         -957610277.67831039d0,-523211901.72276765d0,-523211901.72276765d0/)
-    xin%dt = 900.00000000000000d0
+    xin%dtsurf = 900.00000000000000d0
 !    xin%hfluxes = (/0.0000000000000000d0,-45.658689869108855d0, &
 !        18.213411477806982d0,4.5541404193169885d0/)
-!    xin%hfluxes_deriv = (/0.0000000000000000d0,-3.3942377013218334d0, &
+!    xin%dhfluxes_dT = (/0.0000000000000000d0,-3.3942377013218334d0, &
 !        -8.8987442544935664d0,-0.96319348622397238d0/)
 xin%hfluxes = (/0d0,0d0,0d0,0d0/)
-xin%hfluxes_deriv = (/0d0,0d0,0d0,0d0/)
+xin%dhfluxes_dT = (/0d0,0d0,0d0,0d0/)
 !    xin%pr_rate = 4.8049631298944034d-006
-!    xin%prht = -1.6048576853847307d0
+!    xin%prht_rate = -1.6048576853847307d0
 xin%pr_rate = 0d0
-xin%prht = 0d0
+xin%prht_rate = 0d0
     xin%ma1 = 152.31659338172645d0
     xin%Q1 = 9.0482982185801860d-004
 
@@ -248,7 +248,7 @@ end subroutine
 
 !@test
 subroutine test_fischer_heat_eq
-    use lisnowsubs_mod
+    use LISnow_mod
 
     type(LISnowParams_t) :: params
     type(LISnowCol_t), target :: xcol0, xcol1, xcol
@@ -256,24 +256,29 @@ subroutine test_fischer_heat_eq
     type(LISnowOut_t), target :: xout
     real(real64) :: total0,total1
     real(real64) :: relerr
-    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
+    real(real64), dimension(NFLUXES) :: hfluxes_in, dhfluxes_dT
+    real(real64), allocatable, dimension(:) :: hsn_Z
+    real(real64) :: flux_bZ, deltaT_tAZ
 
     call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
+    allocate(hsn_Z(size(xcol%dz)))
 
     ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
     hfluxes_in(:) = xin%hfluxes(:)
-    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
+    dhfluxes_dT(:) = xin%dhfluxes_dT(:)
     xin%hfluxes(:) = 0d0
-    xin%hfluxes_deriv(:) = 0d0
+    xin%dhfluxes_dT(:) = 0d0
 
     call xcol0%assign(xcol)
-    call fischer_heat_eq(xcol, hfluxes_in, hfluxes_in_deriv, xin%dt, xout)
+    call fischer_heat_eq( &
+        xcol, sum(hfluxes_in), sum(dhfluxes_dT), xin%dtsurf, 0d0, &
+        hsn_Z, flux_bZ, deltaT_tAZ)
 
 
     ! ------ Conservation formula for fischer_heat_eq
-    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + xin%dt * ( &
-        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
-        - xout%basal_flux_out)
+    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + xin%dtsurf * ( &
+        + sum(hfluxes_in) + deltaT_tAZ * sum(dhfluxes_dT) &
+        - flux_bZ)
     total1 = sum(xcol%hsn(1:xcol%nl_ice))
 
 print *,'total0',total0,total1
@@ -281,106 +286,14 @@ print *,'total0',total0,total1
     @assertLessThan(relerr, 1d-12)
 
     ! Make sure correction from hfluxes_derv is noticeable
-    relerr = abs(xout%flux_corr_factor * sum(hfluxes_in_deriv) / total0)
+    relerr = abs(deltaT_tAZ * sum(dhfluxes_dT) / total0)
     @assertGreaterThan(relerr, 1d-12)
 
 end subroutine test_fischer_heat_eq
 ! --------------------------------------------------
-!@test
-subroutine test_precip_and_heat_no_precip
-    use lisnowsubs_mod
-
-    type(LISnowParams_t) :: params
-    type(LISnowCol_t), target :: xcol0, xcol1, xcol
-    type(LISnowIn_t), target :: xin
-    type(LISnowOut_t), target :: xout
-    real(real64) :: total0,total1
-    real(real64) :: relerr
-    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
-    type(Debug_precip_and_heat) :: xdebug
-
-    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
-
-    ! Turn off precipitation
-	xin%pr_rate = 0d0
-	xin%prht = 0d0
-	xin%hfluxes(I_EVHT) = 0d0
-	xin%hfluxes_deriv(I_EVHT) = 0d0
-
-    ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
-    hfluxes_in(:) = xin%hfluxes(:)
-    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
-    xin%hfluxes(:) = 0d0
-    xin%hfluxes_deriv(:) = 0d0
-
-    call xcol0%assign(xcol)
-    call precip_and_heat(xcol, xin, hfluxes_in, hfluxes_in_deriv, xout, params, xdebug)
-
-    ! ------ Conservation formula for fischer_heat_eq
-    ! (this formula ignores precip)
-    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + xin%dt * ( &
-        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
-        - xout%basal_flux_out)
-    total1 = sum(xcol%hsn(1:xcol%nl_ice))
-    relerr = abs((total1 - total0) / total0)
-    @assertLessThan(relerr, 1d-12)
-
-    ! ------ Conservation of mass (make sure mass hasn't changed)
-    total0 = sum(xcol0%wsn(1:xcol0%nl_ice))
-    total1 = sum(xcol%wsn(1:xcol%nl_ice))
-    @assertEqual(total0,total1)
-
-end subroutine test_precip_and_heat_no_precip
 ! ------------------------------------------------------
 @test
-subroutine test_precip_and_heat
-    use lisnowsubs_mod
-
-    type(LISnowParams_t) :: params
-    type(LISnowCol_t), target :: xcol0, xcol1, xcol
-    type(LISnowIn_t), target :: xin
-    type(LISnowOut_t), target :: xout
-    real(real64) :: total0,total1
-    real(real64) :: relerr
-    real(real64), dimension(NFLUXES) :: hfluxes_in, hfluxes_in_deriv
-    real(real64) :: dConduct, dAdvect
-    type(Debug_precip_and_heat) :: xdebug
-
-    call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
-
-    ! Include precipitation in this test
-    ! (it already came from make_sample_column())
-
-    ! Make sure fischer_heat_eq isn't looking in xin%hfluxes_in
-    hfluxes_in(:) = xin%hfluxes(:)
-    hfluxes_in_deriv(:) = xin%hfluxes_deriv(:)
-    xin%hfluxes(:) = 0d0
-    xin%hfluxes_deriv(:) = 0d0
-
-    call xcol0%assign(xcol)
-    call precip_and_heat(xcol, xin, hfluxes_in, hfluxes_in_deriv, xout, params, xdebug)
-
-    ! ----- Conservation of mass for precip_and_heat
-    total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
-    total1 = sum(xcol%wsn(1:xcol%nl_ice))
-    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
-
-
-    ! ----- Conservation of energy for precip_and_heat
-    dConduct = xin%dt * ( &
-        + sum(hfluxes_in) + xout%flux_corr_factor * sum(hfluxes_in_deriv) &
-        - xout%basal_flux_out)
-    dAdvect = xout%adv_in_heat - xout%adv_out_heat
-    total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
-    total1 = sum(xcol%hsn(1:xcol%nl_ice))
-    @assertLessThan(abs((total1 - total0) / total0), 1d-12)
-
-end subroutine test_precip_and_heat
-! ------------------------------------------------------
-@test
-subroutine test_snow_adv
-    use lisnowsubs_mod
-
+subroutine test_lisnow_advect
     type(LISnowParams_t) :: params
     type(LISnowCol_t), target :: xcol0, xcol1, xcol
     type(LISnowIn_t), target :: xin
@@ -390,33 +303,31 @@ subroutine test_snow_adv
     real(real64) :: dConduct, dAdvect
 
     call make_sample_column(params, xcol, xin, xout, xcol0, xcol1)
-    call snow_adv(xcol, xin, xout, params, xcol0, xcol1)
+    call lisnow_advect(params, xin,xcol,xout, xcol0,xcol1,.false.)
 
     print *,'xin%hfluxes',xin%hfluxes
     print *,'xout%hfluxes',xout%hfluxes
 
-    ! ----- Conservation of mass for snow_adv
+    ! ----- Conservation of mass for lisnow_advect
     total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
     total1 = sum(xcol%wsn(1:xcol%nl_ice))
 print *,'total',total0,total1
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
 
-    ! ----- Conservation of energy for snow_adv
-    dConduct = xin%dt * ( &
+    ! ----- Conservation of energy for lisnow_advect
+    dConduct = xin%dtsurf * ( &
         + sum(xout%hfluxes) &
-        - xout%basal_flux_out)
+        - xout%basal_hflux_out)
     dAdvect = xout%adv_in_heat - xout%adv_out_heat
     total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
     total1 = sum(xcol%hsn(1:xcol%nl_ice))
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
-end subroutine test_snow_adv
+end subroutine test_lisnow_advect
 ! ------------------------------------------------------------
 @test
-subroutine test_snow_adv2
-    use lisnowsubs_mod
-
+subroutine test_lisnow_advect2
     type(LISnowParams_t) :: params
     type(LISnowCol_t), target :: xcol0, xcol1, xcol
     type(LISnowIn_t), target :: xin
@@ -426,34 +337,32 @@ subroutine test_snow_adv2
     real(real64) :: dConduct, dAdvect
 
     call make_sample_column2(params, xcol, xin, xout, xcol0, xcol1)
-    call snow_adv(xcol, xin, xout, params, xcol0, xcol1)
+    call lisnow_advect(params, xin,xcol,xout, xcol0,xcol1,.false.)
 
     print *,'xin%hfluxes',xin%hfluxes
     print *,'xout%hfluxes',xout%hfluxes
 
-    ! ----- Conservation of mass for snow_adv
+    ! ----- Conservation of mass for lisnow_advect
     total0 = sum(xcol0%wsn(1:xcol0%nl_ice)) + xout%adv_in_mass - xout%adv_out_mass
     total1 = sum(xcol%wsn(1:xcol%nl_ice))
 print *,'total',total0,total1
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
 
-    ! ----- Conservation of energy for snow_adv
-    dConduct = xin%dt * ( &
+    ! ----- Conservation of energy for lisnow_advect
+    dConduct = xin%dtsurf * ( &
         + sum(xout%hfluxes) &
-        - xout%basal_flux_out)
+        - xout%basal_hflux_out)
     dAdvect = xout%adv_in_heat - xout%adv_out_heat
     total0 = sum(xcol0%hsn(1:xcol0%nl_ice)) + dConduct + dAdvect
     total1 = sum(xcol%hsn(1:xcol%nl_ice))
     @assertLessThan(abs((total1 - total0) / total0), 1d-12)
 
-end subroutine test_snow_adv2
+end subroutine test_lisnow_advect2
 ! ------------------------------------------------------------
-! A test case from real life (2017-04-03) in which conservation in snow_adv() fails
+! A test case from real life (2017-04-03) in which conservation in lisnow_advect() fails
 !@test
 subroutine test_zero_problem
-    use lisnowsubs_mod
-
     type(LISnowParams_t) :: params
     type(LISnowCol_t), target :: xcol0, xcol1, xcol
     type(LISnowIn_t), target :: xin
@@ -474,13 +383,13 @@ subroutine test_zero_problem
 
 
 
-    xin%dt = 900.00000000000000d0
+    xin%dtsurf = 900.00000000000000d0
     xin%hfluxes = (/0.0000000000000000d0,-104.51203468328217d0,&
         -372.92170269154207d0,-399.58681869995655d0/)
-    xin%hfluxes_deriv = (/0.0000000000000000d0,-4.6224822258585601d0,&
+    xin%dhfluxes_dT = (/0.0000000000000000d0,-4.6224822258585601d0,&
         -141.51385701811219d0,-107.94381585521192d0/)
     xin%pr_rate = 0.0000000000000000d0
-    xin%prht = 0.0000000000000000d0
+    xin%prht_rate = 0.0000000000000000d0
     xin%ma1 = 213.17131003601705d0
     xin%Q1 = 2.0342775114851543d-003
 
@@ -489,11 +398,11 @@ subroutine test_zero_problem
     call xcol%allocate(params%max_nl())
     call xcol0%allocate(params%max_nl())
     call xcol1%allocate(params%max_nl())
-    call xout%allocate(params)
+    call xout%allocate(params%max_nl())
 
     xcol%i=51
     xcol%j=79
-    xcol%ihp=1
+    xcol%ihc=1
     xcol%nl_ice = 4
     xcol%nl_borrowed = 1
     xcol%nl_borrowed_heat = 0
@@ -504,8 +413,7 @@ subroutine test_zero_problem
     xcol%hsn = (/0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0,&
         0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0,0.0000000000000000d0/)
 
-    call snow_adv(xcol,xin,xout,params,xcol0,xcol1)
-
+    call lisnow_advect(params, xin,xcol,xout, xcol0,xcol1,.false.)
 
     call xcol%dump()
 

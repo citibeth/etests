@@ -21,7 +21,7 @@ This consists of unit tests for ModelE.  They are not part of the ModelE repo in
 
     mkdir build
     cd build
-    ectl env ~/exp/160623-stieglitz/e4f40 ../spconfig.py ..
+    ectl env ~/exp/160623-stieglitz/e4f40 ../modele-tests.setup.py ..
 
 4. Inter-project connections are complete, now build like any other package:
 
